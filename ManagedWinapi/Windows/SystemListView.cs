@@ -155,11 +155,11 @@ namespace ManagedWinapi.Windows
                 lvi.iItem = index;
                 lvi.iSubItem = subIndex;
                 lvi.stateMask = 0xffffffff;
-                lvi.mask = LVIF_IMAGE | LVIF_STATE | LVIF_TEXT;
+                lvi.mask = LVIF_IMAGE | LVIF_STATE | LVIF_TEXT | LVIF_INDENT | LVIF_GROUPID | LVIF_COLUMNS | LVIF_PARAM;
                 ProcessMemoryChunk tc = ProcessMemoryChunk.Alloc(sw.Process, 301);
                 lvi.pszText = tc.Location;
                 ProcessMemoryChunk lc = ProcessMemoryChunk.AllocStruct(sw.Process, lvi);
-                ApiHelper.FailIfZero(SystemWindow.SendMessage(new HandleRef(sw, sw.HWnd), SystemListView.LVM_GETITEM, IntPtr.Zero, lc.Location));
+                ApiHelper.FailIfZero(SystemWindow.SendMessage(new HandleRef(sw, sw.HWnd), LVM_GETITEM, IntPtr.Zero, lc.Location));
                 lvi = (LVITEM)lc.ReadToStructure(0, typeof(LVITEM));
                 lc.Dispose();
                 if (lvi.pszText != tc.Location)
@@ -172,9 +172,59 @@ namespace ManagedWinapi.Windows
                 if (title.IndexOf('\0') != -1) title = title.Substring(0, title.IndexOf('\0'));
                 int image = lvi.iImage;
                 uint state = lvi.state;
+                int indent = lvi.iIndent;
+                int group = lvi.iGroupId;
+                uint cols = lvi.cColumns;
+                long param = lvi.lParam.ToInt64();
                 tc.Dispose();
-                return new SystemListViewItem(sw, index, title, state, image);
+                return new SystemListViewItem(sw, index, title, state, image, indent, group, cols, param);
             }
+        }
+
+        private int FindItemIndex(LVFINDINFOA find, int startIndex = -1, string searchText = "")
+        {
+            searchText += "\0";
+            byte[] textBytes = Encoding.Default.GetBytes(searchText);
+            ProcessMemoryChunk tc = ProcessMemoryChunk.Alloc(sw.Process, textBytes.Length);
+            tc.Write(0, textBytes);
+            find.pszText = tc.Location;
+            ProcessMemoryChunk lc = ProcessMemoryChunk.AllocStruct(sw.Process, find);
+            IntPtr result = SystemWindow.SendMessage(new HandleRef(sw, sw.HWnd), LVM_FINDITEM, (IntPtr)startIndex, lc.Location);
+            tc.Dispose();
+            lc.Dispose();
+            return (int)result;
+        }
+
+        public int FindItemIndex(string searchText, bool startsWith = false, bool wrapSearch = false, int startIndex = -1)
+        {
+            LVFINDINFOA find = new LVFINDINFOA();
+            find.flags = LVFI_STRING;
+            if (startsWith) find.flags = find.flags | LVFI_PARTIAL;
+            if (wrapSearch) find.flags = find.flags | LVFI_WRAP;
+
+            return FindItemIndex(find, startIndex, searchText);
+        }
+
+        public int FindItemIndex(long param, bool wrapSearch = false, int startIndex = -1)
+        {
+            LVFINDINFOA find = new LVFINDINFOA();
+            find.flags = LVFI_PARAM;
+            if (wrapSearch) find.flags = find.flags | LVFI_WRAP;
+            find.lparam = (IntPtr)param;
+
+            return FindItemIndex(find, startIndex);
+        }
+
+        public SystemListViewItem FindItem(string searchText, bool startsWith = false, bool wrapSearch = false, int startIndex = -1)
+        {
+            int index = FindItemIndex(searchText, startsWith, wrapSearch, startIndex);
+            return (index < 0 || index > this.Count) ? null : this[index];
+        }
+
+        public SystemListViewItem FindItem(long param, bool wrapSearch = false, int startIndex = -1)
+        {
+            int index = FindItemIndex(param, wrapSearch, startIndex);
+            return (index < 0 || index > this.Count) ? null : this[index];
         }
 
         /// <summary>
@@ -214,6 +264,7 @@ namespace ManagedWinapi.Windows
             LVM_GETITEMPOSITION = (0x1000 + 16),
             LVM_GETITEMCOUNT = (0x1000 + 4),
             LVM_GETITEM = 0x1005,
+            LVM_FINDITEM = (0x1000 + 13),
             LVM_ENSUREVISIBLE = (0x1000 + 19),
             LVM_GETCOLUMN = (0x1000 + 25),
             LVM_SETITEMSTATE = (0x1000 + 43),
@@ -221,11 +272,19 @@ namespace ManagedWinapi.Windows
 
         private static readonly uint LVIF_TEXT = 0x1,
             LVIF_IMAGE = 0x2,
+            LVIF_PARAM = 0x4,
             LVIF_STATE = 0x8,
+            LVIF_INDENT = 0x10,
+            LVIF_COLUMNS = 0x200,
+            LVIF_GROUPID = 0x100,
             LVCF_FMT = 0x1,
             LVCF_WIDTH = 0x2,
             LVCF_TEXT = 0x4,
-            LVCF_SUBITEM = 0x8;
+            LVCF_SUBITEM = 0x8,
+            LVFI_PARAM = 0x1,
+            LVFI_PARTIAL = 0x8,
+            LVFI_STRING = 0x2,
+            LVFI_WRAP = 0x20;
 
         [StructLayout(LayoutKind.Sequential)]
         private struct LVCOLUMN
@@ -250,6 +309,26 @@ namespace ManagedWinapi.Windows
             public Int32 cchTextMax;
             public Int32 iImage;
             public IntPtr lParam;
+            public Int32 iIndent;
+            public Int32 iGroupId;
+            public UInt32 cColumns;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct POINT
+        {
+            public long x;
+            public long y;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct LVFINDINFOA
+        {
+            public uint flags;
+            public IntPtr pszText;
+            public IntPtr lparam;
+            public POINT pt;
+            public uint vkDirection;
         }
         #endregion
     }
@@ -270,14 +349,22 @@ namespace ManagedWinapi.Windows
         readonly uint state;
         readonly int image, index;
         readonly SystemWindow sw;
+        readonly int indent;
+        readonly int groupId;
+        readonly uint columns;
+        readonly long param;
 
-        internal SystemListViewItem(SystemWindow sw, int index, string title, uint state, int image)
+        internal SystemListViewItem(SystemWindow sw, int index, string title, uint state, int image, int indent, int groupId, uint columns, long param)
         {
             this.sw = sw;
             this.index = index;
             this.title = title;
             this.state = state;
             this.image = image;
+            this.indent = indent;
+            this.groupId = groupId;
+            this.columns = columns;
+            this.param = param;
         }
 
         /// <summary>
@@ -289,6 +376,27 @@ namespace ManagedWinapi.Windows
         /// The index of this item's image in the image list of this list view.
         /// </summary>
         public int Image { get { return image; } }
+
+        /// <summary>
+        /// Internal value identifying this item. Typically unique, but not guaranteed to be.
+        /// </summary>
+        public long Param { get { return param; } }
+
+        /// <summary>
+        /// The number of image widths to indent the item.
+        /// </summary>
+        public int Indent { get { return indent; } }
+
+        /// <summary>
+        /// The identifier of the group that the item belongs to.
+        /// </summary>
+        public int GroupID { get { return groupId; } }
+
+        /// <summary>
+        /// The number of data columns (subitems) to display for this item in tile view.
+        /// </summary>
+        [CLSCompliant(false)]
+        public uint NumColumns { get { return columns; } }
 
         /// <summary>
         /// The appearance of a selected item depends on whether it has the focus and also on the system colors used for selection.
