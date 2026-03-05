@@ -5,21 +5,23 @@
 		<PackageId>mwinapi</PackageId>
 		<AssemblyName>mwinapi</AssemblyName>
 		<Product>ManagedWinapi</Product>
-		<Version>0.3.0.5</Version>
+		<Version>0.3.0.6</Version>
 		<Authors>Schierlm</Authors>
 		<PackageLicenseExpression>LGPL-2.1-only</PackageLicenseExpression>
 		<PackageProjectUrl>http://mwinapi.sourceforge.net/</PackageProjectUrl>
 		<Description>A collection of .NET components that wrap PInvoke calls to access native API by managed code.</Description>
 		<Copyright>Copyright ©  2005, 2006, 2007, 2008, 2009, 2010, 2011 Michael Schierl</Copyright>
 		<PackageTags>WinApi Native</PackageTags>
-		<RepositoryType>svn</RepositoryType>
-		<RepositoryUrl>https://svn.code.sf.net/p/mwinapi/code/trunk</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+		<RepositoryUrl>https://github.com/Aldaviva/mwinapi.git</RepositoryUrl>
+        <PublishRepositoryUrl>true</PublishRepositoryUrl>
 		<GeneratePackageOnBuild>false</GeneratePackageOnBuild>
 		<IncludeSource>True</IncludeSource>
 		<IncludeSymbols>True</IncludeSymbols>   
 		<SymbolPackageFormat>snupkg</SymbolPackageFormat>   
 		<Configurations>Debug;ReleaseUnsigned;ReleaseSigned</Configurations>
 		<Deterministic>true</Deterministic>
+		<PackageIcon>schierlm.jpg</PackageIcon>
 	</PropertyGroup>
 
 	<PropertyGroup Condition="'$(Configuration)' == 'Debug'">
@@ -66,5 +68,9 @@
 			<CopyToOutputDirectory>true</CopyToOutputDirectory>
 		</None>
 		<None Include="mwinapi.targets" Pack="True" PackagePath="build\$(PackageId).targets" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <None Include="schierlm.jpg" Pack="true" PackagePath="\" />
 	</ItemGroup>
 </Project>
